@@ -1,0 +1,33 @@
+# Transformer Training Configuration
+# IWSLT 2016 German-English Translation
+
+model:
+  d_model: 512          # Model dimension
+  n_heads: 8            # Number of attention heads
+  n_encoder_layers: 6   # Number of encoder layers
+  n_decoder_layers: 6   # Number of decoder layers
+  d_ff: 2048            # Feed-forward dimension
+  dropout: 0.1          # Dropout probability
+  max_seq_len: 256      # Maximum sequence length
+
+training:
+  epochs: 30            # Number of training epochs
+  batch_size: 32        # Batch size
+  learning_rate: 0.0001 # Base learning rate
+  warmup_steps: 4000    # Number of warmup steps
+  label_smoothing: 0.1  # Label smoothing factor
+  gradient_clip: 1.0    # Gradient clipping value
+
+  # Logging and checkpointing
+  log_interval: 100     # Steps between logging
+  eval_interval: 1000   # Steps between evaluation
+  save_interval: 5000   # Steps between checkpointing
+
+data:
+  data_dir: ./data      # Directory for dataset
+  vocab_size: 32000     # Vocabulary size
+  min_freq: 2           # Minimum token frequency
+  max_seq_len: 256      # Maximum sequence length
+
+# Output directories
+save_dir: ./checkpoints

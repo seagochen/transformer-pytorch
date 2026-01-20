@@ -1,0 +1,5 @@
+# Transformer for IWSLT 2016 De-En Translation
+# Core dependencies only - no third-party NLP libraries
+
+torch>=2.0.0
+pyyaml>=6.0
