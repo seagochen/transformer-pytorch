@@ -50,6 +50,7 @@ class Transformer(nn.Module):
 
         self.padding_idx = padding_idx
         self.d_model = d_model
+        self.max_seq_len = max_seq_len
 
         # Source embedding
         self.src_embedding = TransformerEmbedding(

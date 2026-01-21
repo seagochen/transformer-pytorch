@@ -5,6 +5,7 @@ Training loop with label smoothing, gradient clipping, and BLEU evaluation.
 """
 
 import math
+import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -299,9 +300,10 @@ class Trainer:
 
                 # Hypothesis (greedy decode)
                 src_single = src[i:i+1]
+                decode_max_len = min(tgt_y.size(1) + 10, self.model.max_seq_len)
                 hyp_indices = self.model.greedy_decode(
                     src_single,
-                    max_len=tgt_y.size(1) + 10,
+                    max_len=decode_max_len,
                     sos_idx=self.vocab.sos_idx,
                     eos_idx=self.vocab.eos_idx
                 ).squeeze(0).tolist()
@@ -408,6 +410,9 @@ class Trainer:
             val_loss, val_bleu = self.validate(val_loader)
             print(f"\nEpoch {epoch + 1} complete: val_loss={val_loss:.4f}, BLEU={val_bleu:.2f}")
 
+            # Show translation samples
+            self.show_translation_samples(val_loader.dataset, n_samples=3)
+
         # Save final model
         self.save_checkpoint(save_dir / "final.pt")
 
@@ -492,3 +497,37 @@ class Trainer:
         translation = self.vocab.decode(output_indices, skip_special_tokens=True)
 
         return translation
+
+    def show_translation_samples(
+        self,
+        dataset,
+        n_samples: int = 3,
+        max_len: int = 100
+    ):
+        """
+        Show random translation samples from the dataset.
+
+        Args:
+            dataset: Dataset with src_texts and tgt_texts attributes
+            n_samples: Number of samples to show
+            max_len: Maximum output length for decoding
+        """
+        self.model.eval()
+
+        # Get random indices
+        indices = random.sample(range(len(dataset)), min(n_samples, len(dataset)))
+
+        print("\n" + "-" * 40)
+        print("Translation Samples:")
+        print("-" * 40)
+
+        for i, idx in enumerate(indices, 1):
+            src_text = dataset.src_texts[idx]
+            tgt_text = dataset.tgt_texts[idx]
+
+            # Translate
+            translation = self.translate(src_text, beam_size=1, max_len=max_len)
+
+            print(f"\n[{i}] Source (De): {src_text}")
+            print(f"    Target (En): {tgt_text}")
+            print(f"    Model  (En): {translation}")
