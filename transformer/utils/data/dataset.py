@@ -12,7 +12,6 @@ from typing import Dict, List, Optional, Tuple
 
 from .download import download_iwslt2016, load_iwslt_split
 from .vocabulary import Vocabulary
-from .tokenizer import BPETokenizer
 
 
 class IWSLT2016Dataset(Dataset):

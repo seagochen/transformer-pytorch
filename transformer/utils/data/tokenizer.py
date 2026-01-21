@@ -387,37 +387,3 @@ class BPETokenizer:
         }
 
         return tokenizer
-
-
-def build_shared_tokenizer(
-    src_texts: List[str],
-    tgt_texts: List[str],
-    vocab_size: int = 32000,
-    min_freq: int = 2,
-    save_path: Optional[str] = None
-) -> BPETokenizer:
-    """
-    Build a shared BPE tokenizer from source and target texts.
-
-    Args:
-        src_texts: Source language texts
-        tgt_texts: Target language texts
-        vocab_size: Target vocabulary size
-        min_freq: Minimum frequency
-        save_path: Optional path to save the tokenizer
-
-    Returns:
-        Trained BPE tokenizer
-    """
-    # Combine source and target texts
-    all_texts = src_texts + tgt_texts
-
-    # Create and train tokenizer
-    tokenizer = BPETokenizer(vocab_size=vocab_size, min_freq=min_freq)
-    tokenizer.fit(all_texts)
-
-    # Save if path provided
-    if save_path:
-        tokenizer.save(save_path)
-
-    return tokenizer

@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from collections import Counter
 
 from ..models import Transformer
@@ -207,7 +207,6 @@ class Trainer:
 
         # Training state
         self.global_step = 0
-        self.best_val_loss = float("inf")
         self.best_bleu = 0.0
 
     def train_step(self, batch: Dict[str, torch.Tensor]) -> float:
@@ -428,7 +427,6 @@ class Trainer:
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict(),
             "global_step": self.global_step,
-            "best_val_loss": self.best_val_loss,
             "best_bleu": self.best_bleu
         }
 
@@ -443,7 +441,6 @@ class Trainer:
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         self.global_step = checkpoint["global_step"]
-        self.best_val_loss = checkpoint.get("best_val_loss", float("inf"))
         self.best_bleu = checkpoint.get("best_bleu", 0.0)
 
         print(f"Checkpoint loaded from {path}")

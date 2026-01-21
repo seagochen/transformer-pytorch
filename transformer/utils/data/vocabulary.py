@@ -5,7 +5,6 @@ Provides a simple vocabulary class that wraps the BPE tokenizer
 for easier access to vocabulary properties.
 """
 
-import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
