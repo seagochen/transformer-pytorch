@@ -12,6 +12,7 @@ import torch.optim as optim
 from pathlib import Path
 from typing import Dict, List, Tuple
 from collections import Counter
+from tqdm import tqdm
 
 from ..models import Transformer
 from ..utils.callbacks import TransformerLRScheduler
@@ -252,33 +253,37 @@ class Trainer:
         return loss.item()
 
     @torch.no_grad()
-    def validate(self, dataloader) -> Tuple[float, float]:
+    def validate(self, dataloader, n_samples: int = 1000) -> Tuple[float, float]:
         """
         Validate on validation set.
 
         Args:
             dataloader: Validation dataloader
+            n_samples: Number of random samples to use for validation
 
         Returns:
             Tuple of (average loss, BLEU score)
         """
         self.model.eval()
+        dataset = dataloader.dataset
+
+        # Randomly sample indices
+        all_indices = list(range(len(dataset)))
+        sample_indices = random.sample(all_indices, min(n_samples, len(dataset)))
 
         total_loss = 0
         total_tokens = 0
-
         all_references = []
         all_hypotheses = []
 
-        for batch in dataloader:
-            src = batch["src"].to(self.device)
-            tgt = batch["tgt"].to(self.device)
-            tgt_y = batch["tgt_y"].to(self.device)
+        for idx in tqdm(sample_indices, desc="Validating", leave=False):
+            sample = dataset[idx]
+            src = sample["src"].unsqueeze(0).to(self.device)
+            tgt = sample["tgt"].unsqueeze(0).to(self.device)
+            tgt_y = sample["tgt_y"].unsqueeze(0).to(self.device)
 
-            # Forward pass
+            # Forward pass for loss
             output = self.model(src, tgt)
-
-            # Compute loss
             loss = self.criterion(output, tgt_y)
 
             # Count non-padding tokens
@@ -286,35 +291,32 @@ class Trainer:
             total_loss += loss.item() * non_padding
             total_tokens += non_padding
 
-            # Generate translations for BLEU
-            for i in range(src.size(0)):
-                # Reference
-                ref_indices = tgt_y[i].tolist()
-                ref_tokens = []
-                for idx in ref_indices:
-                    if idx == self.vocab.eos_idx:
-                        break
-                    if idx != self.vocab.pad_idx:
-                        ref_tokens.append(self.vocab.idx_to_token(idx))
-                all_references.append(ref_tokens)
+            # Reference tokens
+            ref_indices = tgt_y.squeeze(0).tolist()
+            ref_tokens = []
+            for token_idx in ref_indices:
+                if token_idx == self.vocab.eos_idx:
+                    break
+                if token_idx != self.vocab.pad_idx:
+                    ref_tokens.append(self.vocab.idx_to_token(token_idx))
+            all_references.append(ref_tokens)
 
-                # Hypothesis (greedy decode)
-                src_single = src[i:i+1]
-                decode_max_len = min(tgt_y.size(1) + 10, self.model.max_seq_len)
-                hyp_indices = self.model.greedy_decode(
-                    src_single,
-                    max_len=decode_max_len,
-                    sos_idx=self.vocab.sos_idx,
-                    eos_idx=self.vocab.eos_idx
-                ).squeeze(0).tolist()
+            # Hypothesis (greedy decode)
+            decode_max_len = min(tgt_y.size(1) + 10, self.model.max_seq_len)
+            hyp_indices = self.model.greedy_decode(
+                src,
+                max_len=decode_max_len,
+                sos_idx=self.vocab.sos_idx,
+                eos_idx=self.vocab.eos_idx
+            ).squeeze(0).tolist()
 
-                hyp_tokens = []
-                for idx in hyp_indices:
-                    if idx == self.vocab.eos_idx:
-                        break
-                    if idx not in [self.vocab.pad_idx, self.vocab.sos_idx]:
-                        hyp_tokens.append(self.vocab.idx_to_token(idx))
-                all_hypotheses.append(hyp_tokens)
+            hyp_tokens = []
+            for token_idx in hyp_indices:
+                if token_idx == self.vocab.eos_idx:
+                    break
+                if token_idx not in [self.vocab.pad_idx, self.vocab.sos_idx]:
+                    hyp_tokens.append(self.vocab.idx_to_token(token_idx))
+            all_hypotheses.append(hyp_tokens)
 
         avg_loss = total_loss / total_tokens if total_tokens > 0 else 0
         bleu = compute_bleu(all_references, all_hypotheses)
@@ -328,7 +330,6 @@ class Trainer:
         epochs: int = 30,
         save_dir: str = "./checkpoints",
         log_interval: int = 100,
-        eval_interval: int = 1000,
         save_interval: int = 5000
     ) -> Dict:
         """
@@ -340,7 +341,6 @@ class Trainer:
             epochs: Number of epochs
             save_dir: Directory to save checkpoints
             log_interval: Steps between logging
-            eval_interval: Steps between evaluation
             save_interval: Steps between checkpointing
 
         Returns:
@@ -363,44 +363,36 @@ class Trainer:
         print(f"Steps per epoch: ~{len(train_loader)}")
         print("=" * 60)
 
-        running_loss = 0
-        running_count = 0
-
         for epoch in range(epochs):
-            print(f"\nEpoch {epoch + 1}/{epochs}")
-            print("-" * 40)
+            self.model.train()
+            running_loss = 0
+            running_count = 0
 
-            for batch_idx, batch in enumerate(train_loader):
+            # Create progress bar for this epoch
+            pbar = tqdm(
+                train_loader,
+                desc=f"Epoch {epoch + 1}/{epochs}",
+                unit="batch",
+                dynamic_ncols=True
+            )
+
+            for batch in pbar:
                 loss = self.train_step(batch)
 
                 running_loss += loss
                 running_count += 1
                 history["train_loss"].append(loss)
 
-                # Logging
+                # Update progress bar
+                avg_loss = running_loss / running_count
+                lr = self.optimizer.param_groups[0]["lr"]
+                pbar.set_postfix(loss=f"{avg_loss:.4f}", lr=f"{lr:.2e}")
+
+                # Record learning rate periodically
                 if self.global_step % log_interval == 0:
-                    avg_loss = running_loss / running_count
-                    lr = self.optimizer.param_groups[0]["lr"]
                     history["learning_rate"].append(lr)
-
-                    print(f"Step {self.global_step}: loss={avg_loss:.4f}, lr={lr:.2e}")
-
                     running_loss = 0
                     running_count = 0
-
-                # Evaluation
-                if self.global_step % eval_interval == 0:
-                    val_loss, val_bleu = self.validate(val_loader)
-                    history["val_loss"].append(val_loss)
-                    history["val_bleu"].append(val_bleu)
-
-                    print(f"  Validation: loss={val_loss:.4f}, BLEU={val_bleu:.2f}")
-
-                    # Save best model
-                    if val_bleu > self.best_bleu:
-                        self.best_bleu = val_bleu
-                        self.save_checkpoint(save_dir / "best.pt")
-                        print(f"  ★ New best BLEU: {val_bleu:.2f}")
 
                 # Checkpointing
                 if self.global_step % save_interval == 0:
@@ -408,7 +400,15 @@ class Trainer:
 
             # End of epoch evaluation
             val_loss, val_bleu = self.validate(val_loader)
+            history["val_loss"].append(val_loss)
+            history["val_bleu"].append(val_bleu)
             print(f"\nEpoch {epoch + 1} complete: val_loss={val_loss:.4f}, BLEU={val_bleu:.2f}")
+
+            # Save best model
+            if val_bleu > self.best_bleu:
+                self.best_bleu = val_bleu
+                self.save_checkpoint(save_dir / "best.pt")
+                print(f"  ★ New best BLEU: {val_bleu:.2f}")
 
             # Show translation samples
             self.show_translation_samples(val_loader.dataset, n_samples=3)

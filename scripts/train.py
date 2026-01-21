@@ -146,12 +146,6 @@ def parse_args():
         default=100,
         help="Steps between logging"
     )
-    parser.add_argument(
-        "--eval_interval",
-        type=int,
-        default=1000,
-        help="Steps between evaluation"
-    )
 
     # Device
     parser.add_argument(
@@ -258,8 +252,7 @@ def main():
         val_loader=val_loader,
         epochs=args.epochs,
         save_dir=args.save_dir,
-        log_interval=args.log_interval,
-        eval_interval=args.eval_interval
+        log_interval=args.log_interval
     )
 
     # Final evaluation on test set
